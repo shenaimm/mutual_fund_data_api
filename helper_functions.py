@@ -1,34 +1,35 @@
 import requests as r
+import lxml
 from bs4 import BeautifulSoup
 import pandas as pd
 import re
+import logging
+logging.basicConfig(filename='mf.log',level=logging.DEBUG)
 
-
+mf_logger = logging.getLogger(__name__)
 def get_data(url,params = None ,headers =None,request_type = 'get'):
-    if request_type.lower() == 'get':
-        data = r.get(url = url,params =params)
-        return(data) 
-    else:
-        data = r.post(url = url, data = headers,params = params)
-        return(data)
+    data = r.get(url=url, params=params) if request_type.lower() == 'get' \
+           else r.post(url = url, data = headers,params = params)
+    return data
+
 
     
 
-def get_mfh_data(url, get_d = False,path = 'mfh.p'):
+def get_mfh_data(url, get_d = False,path = None):
     if get_d:
         fh_data = get_data(url = url)
-        fh_data = BeautifulSoup(fh_data.text,'lxml')
+        fh_data = BeautifulSoup(fh_data.text,'html.parser')
         fh_data = fh_data.findAll(name = 'option')
         fh_data = [(i.text,i.attrs['value']) for i in fh_data if 'value' in i.attrs.keys()  if (i.attrs['value'].isdigit()) if len(re.findall(string = i.text,pattern = 'Fund')) > 0]
         fh_data = pd.DataFrame(fh_data)
         fh_data.rename(columns = {0: 'mutual_fund_house',1 : 'mutual_fund_house_number'}, inplace =True)
-        fh_data.to_pickle('mfh.p')
+        if path: fh_data.to_pickle('mfh.p')
     else:
         fh_data = pd.read_pickle('mfh.p')
     return(fh_data)
 
 
-def get_int_mf_data(url_mfh, headers_dict,params,get_d = False):
+def get_int_mf_data(url_mfh, headers_dict,params,get_d = False,path = None):
     if get_d:
         mf_umfh = None
         for i in params:
@@ -37,12 +38,8 @@ def get_int_mf_data(url_mfh, headers_dict,params,get_d = False):
             p_data = [(j['Text'].strip(),j['Value'].strip()) for j in p_data]
             p_data = pd.DataFrame(p_data)
             p_data.rename(columns = {0 : 'mf_name',1 : 'mf_number'},inplace = True)
-            if mf_umfh is None:
-                mf_umfh = p_data
-            else:
-                mf_umfh = pd.concat([mf_umfh,p_data])
-            
-        mf_umfh.to_pickle('mfd.p')
+            mf_umfh = p_data if mf_umfh  else pd.concat([mf_umfh,p_data])
+            if path: mf_umfh.to_pickle('mfd.p')
     else:
         mf_umfh = pd.read_pickle('mfd.p')
     return(mf_umfh)
