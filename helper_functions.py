@@ -7,6 +7,7 @@ import logging
 logging.basicConfig(filename='mf.log',level=logging.DEBUG)
 
 mf_logger = logging.getLogger(__name__)
+
 def get_data(url,params = None ,headers =None,request_type = 'get'):
     data = r.get(url=url, params=params) if request_type.lower() == 'get' \
            else r.post(url = url, data = headers,params = params)
@@ -15,21 +16,17 @@ def get_data(url,params = None ,headers =None,request_type = 'get'):
 
     
 
-def get_mfh_data(url, get_d = False,path = None):
-    if get_d:
+def get_mfh_data(url):
         fh_data = get_data(url = url)
         fh_data = BeautifulSoup(fh_data.text,'html.parser')
         fh_data = fh_data.findAll(name = 'option')
         fh_data = [(i.text,i.attrs['value']) for i in fh_data if 'value' in i.attrs.keys()  if (i.attrs['value'].isdigit()) if len(re.findall(string = i.text,pattern = 'Fund')) > 0]
         fh_data = pd.DataFrame(fh_data)
         fh_data.rename(columns = {0: 'mutual_fund_house',1 : 'mutual_fund_house_number'}, inplace =True)
-        if path: fh_data.to_pickle('mfh.p')
-    else:
-        fh_data = pd.read_pickle('mfh.p')
     return(fh_data)
 
 
-def get_int_mf_data(url_mfh, headers_dict,params,get_d = False,path = None):
+def get_int_mf_data(url_mfh, headers_dict,params):
     if get_d:
         mf_umfh = None
         for i in params:
