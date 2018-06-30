@@ -9,7 +9,7 @@ import pandas as pd
 import requests as r
 from bs4 import BeautifulSoup
 from fuzzywuzzy import process
-
+from helper_functions import DataCriteria
 # TODO: create a custom error class -Done
 # TODO: add the link for the documentation url in this error
 
@@ -59,9 +59,7 @@ def check_internet_conn_deco(funct):
     return check_internet
 
 
-
-class GetData:
-
+class amfi_hf:
     def __init__(self):
         pass
 
@@ -72,9 +70,8 @@ class GetData:
             else r.post(url=url, data=headers, params=params)
         return data
 
-    @staticmethod
     def get_mfh_data():
-        fh_data = GetData.get_data(url='https://www.amfiindia.com/net-asset-value/nav-history')
+        fh_data = amfi_hf.get_data(url='https://www.amfiindia.com/net-asset-value/nav-history')
         if fh_data:
             fh_data = BeautifulSoup(fh_data.text, 'lxml')
             fh_data = fh_data.findAll(name='option')
@@ -88,17 +85,13 @@ class GetData:
 
     @staticmethod
     def get_int_mf_data(mfh_id):
-        params = [mfh_id] if type(mfh_id) == int else mfh_id
-        params = [{'ID': i} for i in params]
-        mf_umfh = None
-        for i in params:
-            p_data = GetData.get_data(url='https://www.amfiindia.com/modules/NavHistorySchemeNav',
-                              params=i,
-                              headers={'X-Requested-With': 'XMLHttpRequest', 'Content-Length': '55'},
-                              request_type='post').json()
-            p_data = pd.DataFrame([{'sch_name': j['Text'].strip(), 'sch_id':j['Value'].strip(), 'mfh_id':i['ID']} for j in p_data])
-            mf_umfh = p_data if mf_umfh is None else pd.concat([mf_umfh, p_data])
-        return mf_umfh
+        param = {'ID': mfh_id}
+        p_data = amfi_hf.get_data(url='https://www.amfiindia.com/modules/NavHistorySchemeNav',
+                          params=param,
+                          headers={'X-Requested-With': 'XMLHttpRequest', 'Content-Length': '55'},
+                          request_type='post').json()
+        p_data = pd.DataFrame([{'sch_name': j['Text'].strip(), 'sch_id':j['Value'].strip(), 'mfh_id':param['ID']} for j in p_data])
+        return p_data
 
     @staticmethod
     def lookupcreate(refresh_days=90, force_refresh=False):
@@ -115,81 +108,76 @@ class GetData:
                 refresh_check = True
 
         elif force_refresh | refresh_check:
-            mfh_data = GetData.get_mfh_data()
-            lookup = GetData.get_int_mf_data(mfh_data.mfh_id.unique())
+            mfh_data = amfi_hf.get_mfh_data()
+            lookup = amfi_hf.get_int_mf_data(mfh_data.mfh_id.unique())
             lookup['refresh_date'] = dt.date.today()
             lookup.to_pickle(path='lookup.p', protocol=2)
             mfh_data.to_pickle(path='mfh.p', protocol=2)
         return True
 
-    def get_scheme_data(params):
-        scheme_d = None
-        for i in params:
-            schemedata = GetData.get_data(url='https://www.amfiindia.com/modules/NavHistoryPeriod',
-                                  params=i,
+    def get_scheme_data(param):
+        schemedata = amfi_hf.get_data(url='https://www.amfiindia.com/modules/NavHistoryPeriod',
+                                  params=param,
                                   headers={'X-Requested-With': 'XMLHttpRequest', 'Content-Length': '55'},
                                   request_type='post')
-            if schemedata:
-                schemedata = BeautifulSoup(schemedata.text, 'lxml')
-                cols = [j.string for j in schemedata.findAll('th') if j.string is not None][-4:]
-                schemedata = [k.string for j in schemedata.findAll(name='tr') for k in j if k.string != '\n'][9:]
-                schemedata = [schemedata[4 * j:(4 * j) + 4] for j in range(0, len(schemedata) / 4)]
-                schemedata = pd.DataFrame(data=schemedata, columns=cols)
-                schemedata['mf_id'] = i['mfID']
-                schemedata['sc_id'] = i['scID']
-                scheme_d = schemedata if scheme_d is None else pd.concat([scheme_d, schemedata], ignore_index=True)
-            else:
-                continue
-        return scheme_d
+        if schemedata:
+            schemedata = BeautifulSoup(schemedata.text, 'lxml')
+            cols = [j.string for j in schemedata.findAll('th') if j.string is not None][-4:]
+            schemedata = [k.string for j in schemedata.findAll(name='tr') for k in j if k.string != '\n'][9:]
+            schemedata = [schemedata[4 * j:(4 * j) + 4] for j in range(0, int(len(schemedata) / 4))]
+            schemedata = pd.DataFrame(data=schemedata, columns=cols)
+            schemedata.assign(mf_id = param['mfID'], sc_id = param['scID'])
+        else:
+            schemedata = None
+        return schemedata
 
     # TODO: add more methods to search for names
-    def mf_namematch(name, lookup, match_ratio=90, top_n=10):
+    def mf_namematch(name, lookup, mfh, match_cutoff=80):
         replace_text = {'(d) ': 'dividend', '(md)': 'monthly dividend',
                         '(wd)': 'weekly dividend', '(dd)': 'daily dividend',
                         '(g)': 'growth', ' pru ': 'prudential', '(rp)': 'retail plan',
                         'dir': 'Direct'}
+
         name = Utils.replace_all(name.lower(), replace_text)
-        mfs_name = process.extractOne(name, choices=lookup.sch_name, score_cutoff=90, limit=10)
-        raise amf_api_exception.error_return('mutual_fund_not_found')
+        print(name)
+        mfh_best_id = mfh[process.extractOne(query=name, choices=list(mfh.keys()), score_cutoff=30)[0]]
+        mfs_name = process.extractBests(query=name, choices=list(lookup[lookup['mfh_id'] == str(mfh_best_id)].sch_name),
+                                      score_cutoff=match_cutoff)
+        if len(mfs_name) > 0:
+            return mfs_name
+        else:
+            raise amf_api_exception().error_return('mutual_fund_not_found')
 
 
-    def get_mf_scheme_data(mf_name=None, fDate='01-Jan-2018', tDate='02-Feb-2018'):
-        if mf_name:
-            best_match = GetData.mf_namematch(mf_name)
-            if best_match:
-                s_df = None
-                for i in Utils().date_split(fDate=fDate, tDate=tDate):
-                    param_need = [{'fDate': i['fDate'], 'tDate': i['tDate'], 'mfID': best_match['mfh_id'],
-                                   'scID': best_match['scheme_id']}]
-                    s_d = GetData.get_scheme_data(param_need)
-                    s_df = s_d if s_df is None else pd.concat([s_df, s_d], ignore_index=True)
-                return s_df
+class GetData:
+    def __init__(self):
+        self.lookup = pd.read_pickle('lookup.p')
+        self.mfh = pickle.load(open('mfh.p', 'rb'))
+        pass
+
+    def get_scheme_data(self, searchcriteria):
+        if hasattr(searchcriteria, 'schemename'):
+            best_match = amfi_hf.mf_namematch(name=searchcriteria.schemename, lookup=self.lookup, mfh=self.mfh)
+            if len(best_match) == 0:
+                print("The best match found was--->{match}".format(match=best_match[0][0]))
+                best_match = best_match[0][0]
             else:
-                return None
+                print("The following are the best {c} matches and match score for your search term -->{matches}".format(c = len(best_match),matches=[[i[0],i[1]] for i in best_match]))
+                print("By Default the first match will be taken")
+                best_match = best_match[0][0]
+            best_match = self.lookup.query('sch_name == @best_match')[['mfh_id', 'sch_id']].to_dict('records')[0]
+            best_match['mfID'] = best_match.pop('mfh_id')
+            best_match['scID'] = best_match.pop('sch_id')
+            best_match['fDate'], best_match['tDate'] = searchcriteria.fdate, searchcriteria.tdate
+            d = amfi_hf.get_scheme_data(best_match)
+        if hasattr(searchcriteria,'mfnumber') & hasattr(searchcriteria, 'schemenumber'):
+            params = {}
+            params['mfID'], params['scID'], params['fDate'], params['tDate'] = searchcriteria.mfnumber, \
+                                                                               searchcriteria.schemenumber, \
+                                                                               searchcriteria.fdate, \
+                                                                               searchcriteria.tdate
+            d = amfi_hf.get_scheme_data(params)
+        return d
 
 
-def mud(ls,f):
-    pool = multiprocessing.Pool(processes = 4)
-    rs = pool.map(f, ls)
-    return rs
 
-
-#TODO: explicitly call functions
-
-
-def mf_namematch(name, lookup, match_cutoff=90):
-    replace_text = {'(d) ': 'dividend', '(md)': 'monthly dividend',
-                    '(wd)': 'weekly dividend', '(dd)': 'daily dividend',
-                    '(g)': 'growth', ' pru ': 'prudential', '(rp)': 'retail plan',
-                    'dir': 'Direct'}
-    name = Utils.replace_all(name.lower(), replace_text)
-    mfs_name = process.extractOne(name, choices=lookup.sch_name, score_cutoff=match_cutoff)
-    return mfs_name
-# lookup = pd.read_pickle('lookup.p')
-# a =time.time()
-# mf_namematch(name='Axis Arbitrage Fund - Direct Plan - Dividend',lookup=lookup)
-# print (time.time() - a)
-
-
-# [i.replace(' Mutual Fund','') for i in mfh_names]
-GetData().lookupcreate()
