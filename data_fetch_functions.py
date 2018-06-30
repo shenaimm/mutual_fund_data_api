@@ -9,7 +9,6 @@ import pandas as pd
 import requests as r
 from bs4 import BeautifulSoup
 from fuzzywuzzy import process
-from helper_functions import DataCriteria
 # TODO: create a custom error class -Done
 # TODO: add the link for the documentation url in this error
 
@@ -151,8 +150,8 @@ class amfi_hf:
 
 class GetData:
     def __init__(self):
-        self.lookup = pd.read_pickle('lookup.p')
-        self.mfh = pickle.load(open('mfh.p', 'rb'))
+        self.lookup = pd.read_pickle('lookup_data//lookup.p')
+        self.mfh = pickle.load(open('lookup_data//mfh.p', 'rb'))
         pass
 
     def get_scheme_data(self, searchcriteria):
