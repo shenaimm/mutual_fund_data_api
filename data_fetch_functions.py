@@ -121,7 +121,7 @@ class MFHelper:
     def lookupcreate(refresh_days=90, force_refresh=False):
         if not force_refresh:
             try:
-                refresh_date = pd.read_pickle('lookup.p')
+                refresh_date = pd.read_pickle('lookup_data//lookup.p')
                 refresh_date = refresh_date['refresh_date'].max()
                 refresh_check = (dt.date.today() - refresh_date).days > refresh_days
                 if refresh_check:
@@ -190,6 +190,11 @@ class GetData:
                                                                                    date['fdate'],\
                                                                                    date['tdate']
                 f_inp.extend(MFHelper.get_scheme_data(params))
-            mfdata.data = f_inp
-            mfdata.fDate, mfdata.tDate = searchcriteria.fdate, searchcriteria.tdate
+            mfdata.data, mfdata.fDate, mfdata.tDate, mfdata.scID, mfdata.mfID = f_inp, searchcriteria.fdate, \
+                                                                                searchcriteria.tdate, \
+                                                                                searchcriteria.schemenumber, \
+                                                                                searchcriteria.mfnumber
         return mfdata
+# a = GetData.get_mf_scheme_number(mf_name = 'Tata Digital India Fund - Direct - Growth', match_cutoff=10, n=10)
+# a = MFSearchCriteria().set_schemenumber('135800').set_mfnumber('25').set_fdate('16-Jan-2018').set_tdate('16-Jun-2018')
+# b = GetData.get_scheme_data(a)

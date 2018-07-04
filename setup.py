@@ -19,3 +19,4 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ),
 )
+from data_fetch_functions import *
